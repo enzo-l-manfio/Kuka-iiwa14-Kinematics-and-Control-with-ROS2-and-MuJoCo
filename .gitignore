@@ -1,4 +1,6 @@
 kuka_ws/.vscode/
+kuka_ws/src/.vscode/
 kuka_ws/build/
 kuka_ws/install/
 kuka_ws/log/
+.vscode/
