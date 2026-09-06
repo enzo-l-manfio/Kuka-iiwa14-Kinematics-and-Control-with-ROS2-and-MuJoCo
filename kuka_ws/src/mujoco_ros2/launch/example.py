@@ -5,7 +5,7 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
 
-    directory = get_package_share_directory('mujoco_ros2')                                          # Gets relative path of mujoco_ros2 package    
+    directory = get_package_share_directory('kuka_model')                                          # Gets relative path of mujoco_ros2 package    
     
     xmlScenePath =  os.path.join(directory, 'model', 'scene.xml')
     
@@ -21,7 +21,7 @@ def generate_launch_description():
         parameters = [   
                         {"joint_state_topic_name" : "joint_state"},
                         {"joint_command_topic_name" : "joint_commands"},
-                        {"control_mode" : "VELOCITY"},
+                        {"control_mode" : "TORQUE"},
                         {"simulation_frequency" : 1000},
                         {"visualisation_frequency" : 20},
                         {"camera_focal_point": [0.0, 0.0, 0.25]},

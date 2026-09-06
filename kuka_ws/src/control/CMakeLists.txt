@@ -10,6 +10,22 @@ find_package(ament_cmake REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(rclcpp_action)
+find_package(eigen3_cmake_module REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(pinocchio REQUIRED)
+find_package(interfaces REQUIRED)
+
+add_executable(control_conductor src/control_conductor.cpp)
+ament_target_dependencies(control_conductor 
+                          "rclcpp"
+                          "rclcpp_action"
+                          "Eigen3"
+                          "eigen3_cmake_module"
+                          "interfaces")
+
+target_link_libraries(control_conductor pinocchio::pinocchio)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -22,5 +38,13 @@ if(BUILD_TESTING)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
+
+install(TARGETS
+  control_conductor
+  DESTINATION lib/${PROJECT_NAME})
+
+install(DIRECTORY
+        model
+        DESTINATION share/)
 
 ament_package()

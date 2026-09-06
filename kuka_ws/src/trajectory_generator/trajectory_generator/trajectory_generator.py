@@ -4,7 +4,8 @@ import roboticstoolbox as rtb
 import numpy as np
 from interfaces.srv import TrajectoryRequest
 from spatialmath import SE3
-
+from sensor_msgs.msg import JointState
+from std_msgs.msg import Float64MultiArray
 class TrajectoryGenerator(Node):
 
     def __init__(self):
@@ -30,6 +31,14 @@ class TrajectoryGenerator(Node):
         self.get_logger().info(str(self.kuka_robot))
 
         self.generate_trajectory_srv = self.create_service(TrajectoryRequest, 'generate_trajectory', self.generate_trajectory)
+
+        self.joint_state_subscription = self.create_subscription(
+            JointState,
+            '/joint_state',
+            self.publish_cartesian_state,
+            10)
+
+        self.cartesian_state_publisher = self.create_publisher(Float64MultiArray, 'cartesian_state', 10)
 
     def generate_trajectory(self, request, response):
         
@@ -72,6 +81,18 @@ class TrajectoryGenerator(Node):
         response.message = 'Trajectory successfuly generated'
 
         return response
+
+    def publish_cartesian_state(self, msg):
+
+        joint_coords = msg.position
+        cartesian_state = Float64MultiArray()
+
+        forward_kinematics = self.kuka_robot.fkine(np.array(joint_coords))
+        position = forward_kinematics.t
+        orientation = forward_kinematics.rpy(unit='rad')
+
+        cartesian_state.data = np.concatenate((position, orientation))
+        self.cartesian_state_publisher.publish(cartesian_state)
 
 
 def main():
