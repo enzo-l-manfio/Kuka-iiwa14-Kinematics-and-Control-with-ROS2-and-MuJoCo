@@ -3,11 +3,17 @@
 #include <thread>
 #include <chrono>
 #include <array>
+#include <vector>
+
+#include "Eigen/Dense"
+#include "pinocchio/parsers/mjcf.hpp"
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "interfaces/srv/trajectory_request.hpp"
 #include "interfaces/action/move_to.hpp"
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <std_msgs/msg/float64_multi_array.hpp>
 
 
 class ControlConductor : public rclcpp::Node
@@ -18,14 +24,16 @@ class ControlConductor : public rclcpp::Node
         using MoveTo = interfaces::action::MoveTo;
         using GoalHandleMoveTo = rclcpp_action::ServerGoalHandle<MoveTo>;
 
-        std::shared_ptr<TrajectoryRequest::Request> traj_request = std::make_shared<TrajectoryRequest::Request>();
 
         ControlConductor() : Node("control_conductor")
         {
             RCLCPP_INFO(this->get_logger(), "control_conductor node started");
 
-            this -> declare_parameter("MJCF_path", "");
-            
+            this -> declare_parameter("mjcf_scene_path", "");
+            this -> declare_parameter("Kp", 10.0);
+            this -> declare_parameter("Kd", 0.1);
+            this -> declare_parameter("DoF", 7);
+
             traj_srv_client_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
             move_to_server_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
@@ -71,17 +79,22 @@ class ControlConductor : public rclcpp::Node
 
         rclcpp_action::Server<MoveTo>::SharedPtr move_to_action_server_;
         rclcpp::Client<TrajectoryRequest>::SharedPtr gen_traj_client_;
+        rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_subscriber_;
+        rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr torque_publisher_;
+
 
         rclcpp::CallbackGroup::SharedPtr traj_srv_client_callback_group_;
         rclcpp::CallbackGroup::SharedPtr move_to_server_callback_group_;
 
         //3 Cartesian coordinates and Roll-Pitch-Yall angles
-        std::array<double, 6> current_pos_ = {0.0, 0.0, 1.306, 0.0, 0.0, 0.0}; 
+        std::array<double, 6> current_pos_ = {0.0, 0.0, 1.306, 0.0, 0.0, 0.0};
+
+        std::shared_ptr<TrajectoryRequest::Request> traj_request = std::make_shared<TrajectoryRequest::Request>();
 
         void move_to_execute(const std::shared_ptr<GoalHandleMoveTo> goal_handle)
         {
             const auto goal = goal_handle->get_goal();
-            //auto feedback = std::make_shared<MoveTo::Feedback>();
+            auto feedback = std::make_shared<MoveTo::Feedback>();
             auto result = std::make_shared<MoveTo::Result>();
 
             RCLCPP_INFO(this->get_logger(), "Executing goal");
