@@ -1,0 +1,58 @@
+import os
+from launch import LaunchDescription
+from launch_ros.actions import Node
+from ament_index_python.packages import get_package_share_directory
+
+def generate_launch_description():
+
+    directory = get_package_share_directory('kuka_model')                                          # Gets relative path of mujoco_ros2 package    
+    
+    xmlScenePath =  os.path.join(directory, 'model', 'scene.xml')
+    
+    if not os.path.exists(xmlScenePath):
+        raise FileNotFoundError(f"Scene file does not exist: {xmlScenePath}.")
+
+    xmlModelPath = os.path.join(directory, 'model', 'iiwa14.xml')
+
+    if not os.path.exists(xmlModelPath):
+        raise FileNotFoundError(f"Model file does not exist: {xmlModelPath}")
+
+    kinematics_node = Node(
+                            package="trajectory_generator",
+                            executable="trajectory_generator",
+                            output="screen",
+                            arguments=None,
+                            parameters=[
+                                        {"dt": 0.01}
+                                       ]
+                        )
+
+    mujoco = Node(
+        package    = "mujoco_ros2",
+        executable = "mujoco_node",
+        output     = "screen",
+        arguments  = [xmlScenePath],
+        parameters = [   
+                        {"joint_state_topic_name" : "joint_state"},
+                        {"joint_command_topic_name" : "joint_commands"},
+                        {"control_mode" : "TORQUE"},
+                        {"simulation_frequency" : 1000},
+                        {"visualisation_frequency" : 20},
+                        {"camera_focal_point": [0.0, 0.0, 0.25]},
+                        {"camera_distance": 2.5},
+                        {"camera_azimuth": 135.0},
+                        {"camera_elevation": -20.0},
+                        {"camera_orthographic": True}
+                     ]
+    )
+
+    control_node = Node(
+        package="control",
+        executable="control_conductor",
+        output="screen",
+        parameters=[
+                    {"mjcf_model_path": xmlModelPath}
+                   ]
+    )
+
+    return LaunchDescription([kinematics_node, control_node, mujoco])

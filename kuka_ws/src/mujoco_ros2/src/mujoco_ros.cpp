@@ -124,11 +124,10 @@ void MuJoCoROS::update_simulation()
     {
         for (int i = 0; i < _model->nq; ++i)
         {
-            _jointState->ctrl[i] = _torqueInput[i]                                                  // Transfer torque input
-                                 + _jointState->qfrc_bias[i]                                        // Compensate for gravity
-                                 - 0.01*_jointState->qvel[i];                                       // Add some damping
-                                 
-            _torqueInput[i] = 0.0;                                                                  // Clear value
+            _jointState->ctrl[i] = _torqueInput[i];                                                  // Transfer torque input
+                                 //+ _jointState->qfrc_bias[i]                                        // Compensate for gravity
+                                 //- 0.01*_jointState->qvel[i];                                       // Add some damping
+            //_torqueInput[i] = 0.0;                                                                  // Clear value
         }
     }
 

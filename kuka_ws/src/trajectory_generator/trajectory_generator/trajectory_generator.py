@@ -25,7 +25,7 @@ class TrajectoryGenerator(Node):
             rtb.RevoluteDH(alpha=0.0, d=0.126, a=0.0),
         ])
 
-        self.declare_parameter('dt', 0.001)
+        self.declare_parameter('dt', 0.01)
 
         self.get_logger().info('Robot model:\n')
         self.get_logger().info(str(self.kuka_robot))
@@ -75,8 +75,7 @@ class TrajectoryGenerator(Node):
         response.joint_vel = joint_trajectory.qd.flatten()
         response.joint_acc = joint_trajectory.qdd.flatten()
         
-        response.num_joints = 7
-        response.num_timesteps = len(t)
+        response.dt = dt
         response.success = True
         response.message = 'Trajectory successfuly generated'
 

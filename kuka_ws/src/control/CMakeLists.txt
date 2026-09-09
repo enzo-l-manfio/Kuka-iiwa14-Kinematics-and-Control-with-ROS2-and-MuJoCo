@@ -25,7 +25,9 @@ ament_target_dependencies(control_conductor
                           "rclcpp_action"
                           "Eigen3"
                           "eigen3_cmake_module"
-                          "interfaces")
+                          "interfaces"
+                          "sensor_msgs"
+                          "std_msgs")
 
 target_link_libraries(control_conductor pinocchio::pinocchio)
 
@@ -45,8 +47,6 @@ install(TARGETS
   control_conductor
   DESTINATION lib/${PROJECT_NAME})
 
-install(DIRECTORY
-        model
-        DESTINATION share/)
-
+install (DIRECTORY launch
+         DESTINATION share/${PROJECT_NAME})
 ament_package()

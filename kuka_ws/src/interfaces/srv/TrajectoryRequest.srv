@@ -7,5 +7,4 @@ string message
 float64[] joint_pos
 float64[] joint_vel
 float64[] joint_acc
-int64 num_joints
-int64 num_timesteps
+float32 dt
