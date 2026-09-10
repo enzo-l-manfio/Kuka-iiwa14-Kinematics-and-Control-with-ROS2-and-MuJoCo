@@ -1,5 +1,6 @@
-float64[6] endeffector_desired_coords
+geometry_msgs/Transform desired_tf
+float64 time
 ---
-float64[6] final_end_effector_pos
+geometry_msgs/Transform final_tf
 ---
-float64[6] current_end_effector_pos
+geometry_msgs/Transform current_tf

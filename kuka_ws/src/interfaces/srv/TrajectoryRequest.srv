@@ -1,5 +1,5 @@
-float64[6] initial_cartesian_coord
-float64[6] final_cartesian_coord
+geometry_msgs/Transform initial_tf
+geometry_msgs/Transform final_tf
 float64 time
 ---
 bool success

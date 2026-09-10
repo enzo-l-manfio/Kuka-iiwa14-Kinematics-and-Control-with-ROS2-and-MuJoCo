@@ -1,11 +1,17 @@
 import rclpy
 from rclpy.node import Node
-import roboticstoolbox as rtb
-import numpy as np
+from tf2_ros import TransformBroadcaster
+
 from interfaces.srv import TrajectoryRequest
-from spatialmath import SE3
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64MultiArray
+from geometry_msgs.msg import TransformStamped
+
+import roboticstoolbox as rtb
+import numpy as np
+from spatialmath import SE3, UnitQuaternion
+
+
 class TrajectoryGenerator(Node):
 
     def __init__(self):
@@ -35,25 +41,40 @@ class TrajectoryGenerator(Node):
         self.joint_state_subscription = self.create_subscription(
             JointState,
             '/joint_state',
-            self.publish_cartesian_state,
+            self.broadcast_endeffector_tf,
             10)
 
         self.cartesian_state_publisher = self.create_publisher(Float64MultiArray, 'cartesian_state', 10)
+
+        self.endeffector_tf_broadcaster = TransformBroadcaster(self)
+
+    def tf_to_E3(tf):
+
+        pos_vector = [tf.translation.x,
+                      tf.translation.y,
+                      tf.translation.z]
+        quaternion_elements = [tf.orientation.w,
+                               tf.orientation.x,
+                               tf.orientation.y,
+                               tf.orientation.z]
+        orientation_quaternion = UnitQuaternion(quaternion_elements)
+        return SE3.Trans(pos_vector)*SE3(orientation_quaternion)
+        
 
     def generate_trajectory(self, request, response):
         
         self.get_logger().info('Received generate_trajectory request')
 
-        initial_cartesian_coordinates = request.initial_cartesian_coord
-        final_cartesian_coordinates = request.final_cartesian_coord
+        initial_tf = request.initial_tf
+        final_tf = request.final_tf
         time = request.time
         dt = self.get_parameter('dt').get_parameter_value().double_value
 
         t = np.linspace(0, time, np.round(time/dt).astype(int) )
 
         try:
-            Ti = SE3.Trans(initial_cartesian_coordinates[:3])*SE3.RPY(initial_cartesian_coordinates[-3:])
-            Tf = SE3.Trans(final_cartesian_coordinates[:3])*SE3.RPY(final_cartesian_coordinates[-3:])
+            Ti = self.tf_to_E3(initial_tf)
+            Tf = self.tf_to_E3(final_tf)
         except Exception as e:
             self.get_logger().error(f'Exception when defining pose: {str(e)}')
             response.success = False
@@ -81,17 +102,29 @@ class TrajectoryGenerator(Node):
 
         return response
 
-    def publish_cartesian_state(self, msg):
+    def broadcast_endeffector_tf(self, msg):
 
         joint_coords = msg.position
-        cartesian_state = Float64MultiArray()
 
         forward_kinematics = self.kuka_robot.fkine(np.array(joint_coords))
         position = forward_kinematics.t
-        orientation = forward_kinematics.rpy(unit='rad')
 
-        cartesian_state.data = np.concatenate((position, orientation))
-        self.cartesian_state_publisher.publish(cartesian_state)
+        endeffector_tf = TransformStamped()
+        endeffector_tf.header.stamp = self.get_clock().now().to_msg()
+        endeffector_tf.header.frame_id = "world"
+        endeffector_tf.child_frame_id = "endeffector"
+
+        endeffector_tf.transform.translation.x = position[0]
+        endeffector_tf.transform.translation.y = position[1]
+        endeffector_tf.transform.translation.z = position[2]
+
+        quaternion_orientation = UnitQuaternion(forward_kinematics)
+        endeffector_tf.transform.rotation.x = quaternion_orientation.v[0]
+        endeffector_tf.transform.rotation.y = quaternion_orientation.v[1]
+        endeffector_tf.transform.rotation.z = quaternion_orientation.v[2]
+        endeffector_tf.transform.rotation.w = quaternion_orientation.s
+
+        self.endeffector_tf_broadcaster.sendTransform(endeffector_tf)
 
 
 def main():

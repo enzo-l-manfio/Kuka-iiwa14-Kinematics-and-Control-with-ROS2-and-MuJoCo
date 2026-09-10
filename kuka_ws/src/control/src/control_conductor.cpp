@@ -2,7 +2,6 @@
 #include <functional>
 #include <thread>
 #include <chrono>
-#include <array>
 #include <vector>
 #include <deque>
 #include <string>
@@ -21,6 +20,12 @@
 #include "interfaces/action/move_to.hpp"
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/float64_multi_array.hpp>
+
+#include "geometry_msgs/msg/transform_stamped.hpp"
+#include "geometry_msgs/msg/transform.hpp"
+#include "tf2_ros/transform_broadcaster.hpp"
+#include "tf2_ros/transform_listener.hpp"
+#include "tf2_ros/buffer.hpp"
 
 using namespace std::chrono_literals;
 
@@ -52,9 +57,11 @@ class ControlConductor : public rclcpp::Node
 
             traj_srv_client_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
             move_to_server_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-            //joint_state_subscriber_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-            //torque_publisher_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+            joint_state_subscriber_cbg_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
+
+            endeffector_tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+            endeffector_tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*endeffector_tf_buffer_);
 
             gen_traj_client_ =  this -> create_client<TrajectoryRequest>("generate_trajectory",
                                                      rclcpp::ServicesQoS(),
@@ -94,10 +101,14 @@ class ControlConductor : public rclcpp::Node
                 );
             
             this -> torque_publisher_ = this->create_publisher<std_msgs::msg::Float64MultiArray>("joint_commands", 10);
+
+            rclcpp::SubscriptionOptions options;
+            options.callback_group = this-> joint_state_subscriber_cbg_;
             this -> joint_state_subscriber_ = this->create_subscription<sensor_msgs::msg::JointState>(
                 "joint_state",
                 10,
-                std::bind(&ControlConductor::joint_state_callback, this, std::placeholders::_1));
+                std::bind(&ControlConductor::joint_state_callback, this, std::placeholders::_1),
+                options);
 
             RCLCPP_INFO(this->get_logger(), "%s", this->get_parameter("mjcf_model_path").as_string().c_str());
 
@@ -106,7 +117,7 @@ class ControlConductor : public rclcpp::Node
                 pinocchio::Data data(this->model_);
                 this->data_ = data;
 
-                this->n_joints = this->model_.nv;
+                this->n_joints = (unsigned short)this->model_.nv;
 
                 this->desired_joint_pos_ = pinocchio::neutral(this->model_);
                 this->desired_joint_vel_ = Eigen::VectorXd::Zero(this->n_joints);
@@ -122,31 +133,31 @@ class ControlConductor : public rclcpp::Node
     
             }
             
-             
             this->update_desired_state_timer_ = this->create_wall_timer(10ms, std::bind(&ControlConductor::update_desired_state, this));
+            this->update_current_endeffector_tf_timer_ ;
         }
 
     private:
 
-        rclcpp::CallbackGroup::SharedPtr traj_srv_client_cbg_;
-        rclcpp::CallbackGroup::SharedPtr move_to_server_cbg_;
-        rclcpp::CallbackGroup::SharedPtr joint_state_subscriber_cbg_;
-        rclcpp::CallbackGroup::SharedPtr torque_publisher_cbg_;
+        rclcpp::CallbackGroup::SharedPtr traj_srv_client_cbg_{nullptr};
+        rclcpp::CallbackGroup::SharedPtr move_to_server_cbg_{nullptr};
+        rclcpp::CallbackGroup::SharedPtr joint_state_subscriber_cbg_{nullptr};
 
-        rclcpp_action::Server<MoveTo>::SharedPtr move_to_action_server_;
-        rclcpp::Client<TrajectoryRequest>::SharedPtr gen_traj_client_;
-        rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_subscriber_;
-        rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr torque_publisher_;
+        rclcpp_action::Server<MoveTo>::SharedPtr move_to_action_server_{nullptr};
+        rclcpp::Client<TrajectoryRequest>::SharedPtr gen_traj_client_{nullptr};
+        rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_subscriber_{nullptr};
+        rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr torque_publisher_{nullptr};
 
         std::shared_ptr<TrajectoryRequest::Request> traj_request = std::make_shared<TrajectoryRequest::Request>();
-
-
-        //3 Cartesian coordinates and Roll-Pitch-Yall angles
-        std::array<double, 6> current_work_pos_ = {0.0, 0.0, 1.306, 0.0, 0.0, 0.0};
+    
+        std::unique_ptr<tf2_ros::Buffer> endeffector_tf_buffer_;
+        std::shared_ptr<tf2_ros::TransformListener> endeffector_tf_listener_{nullptr};
+        
+        geometry_msgs::msg::Transform current_endeffector_tf_;
 
         pinocchio::Model model_;
         pinocchio::Data data_;  
-        int n_joints = 6;
+        unsigned short n_joints = 6;
 
         Eigen::MatrixXd Kp;
         Eigen::MatrixXd Kd;
@@ -155,11 +166,12 @@ class ControlConductor : public rclcpp::Node
         std::deque<Eigen::VectorXd> joint_traj_vel_ = {};
         std::deque<Eigen::VectorXd> joint_traj_acc_ = {};
 
-        Eigen::VectorXd desired_joint_pos_;
-        Eigen::VectorXd desired_joint_vel_;
-        Eigen::VectorXd desired_joint_acc_;
+        Eigen::VectorXd desired_joint_pos_ = {};
+        Eigen::VectorXd desired_joint_vel_ = {};
+        Eigen::VectorXd desired_joint_acc_ = {};
 
-        rclcpp::TimerBase::SharedPtr update_desired_state_timer_;
+        rclcpp::TimerBase::SharedPtr update_desired_state_timer_{nullptr};
+        rclcpp::TimerBase::SharedPtr update_current_endeffector_tf_timer_{nullptr};
         
         void joint_state_callback(const sensor_msgs::msg::JointState::SharedPtr msg)
         {
@@ -179,7 +191,6 @@ class ControlConductor : public rclcpp::Node
             torque_message.data = std::vector<double>(torques.data(), torques.data() + torques.size());
 
             this->torque_publisher_->publish(torque_message);
-
         }
 
         void move_to_execute(const std::shared_ptr<GoalHandleMoveTo> goal_handle)
@@ -190,28 +201,51 @@ class ControlConductor : public rclcpp::Node
 
             RCLCPP_INFO(this->get_logger(), "Executing goal");
 
-            this->traj_request -> initial_cartesian_coord = current_work_pos_;
-            this->traj_request -> final_cartesian_coord = goal -> endeffector_desired_coords;
-            this->traj_request -> time = 1.0;
+            auto current_tf = this->endeffector_tf_buffer_->lookupTransform("world", "endeffector");
+
+            this->traj_request -> initial_tf = current_tf;
+            this->traj_request -> final_tf =  goal->desired_tf;
+            this->traj_request -> time = goal->time;
 
             auto gen_traj_future = this->gen_traj_client_->async_send_request(traj_request);
 
             std::future_status gen_traj_status = gen_traj_future.wait_for(std::chrono::seconds(3));
 
-            if (gen_traj_status == std::future_status::ready){
-                RCLCPP_INFO(this->get_logger(), "Received generated trajectory");
-                auto response = gen_traj_future.get();
+            if (gen_traj_status != std::future_status::ready){
 
-                this->joint_traj_pos_ = this -> flatten_vector_to_matrix(response->joint_pos, this->n_joints)   ;
-                this->joint_traj_vel_ = this -> flatten_vector_to_matrix(response->joint_vel, this->n_joints);
-                this->joint_traj_acc_ = this -> flatten_vector_to_matrix(response->joint_acc, this->n_joints);
-
-                result->final_end_effector_pos = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-            }
-            else {
-            RCLCPP_INFO(this->get_logger(), "Error when executing goal");
+                RCLCPP_INFO(this->get_logger(), "Failed to receive trajectory");
+                result -> final_tf = current_tf
+                goal_handle->abort();
+                return;
             }
 
+            RCLCPP_INFO(this->get_logger(), "Received generated trajectory");
+            auto response = gen_traj_future.get();
+
+            this->joint_traj_pos_ = this -> flatten_vector_to_matrix(response->joint_pos, this->n_joints);
+            this->joint_traj_vel_ = this -> flatten_vector_to_matrix(response->joint_vel, this->n_joints);
+            this->joint_traj_acc_ = this -> flatten_vector_to_matrix(response->joint_acc, this->n_joints);
+            
+            rclcpp::Rate loop_rate(1000);
+            bool goal_completed = false;
+            while(rclcpp::ok() && !goal_completed) {
+
+                if (goal_handle->is_canceling()) {
+                    result -> final_tf = current_tf
+                    goal_handle->canceled(result);
+                    RCLCPP_INFO(this->get_logger(), "Goal canceled successfully");
+                    return;
+                }
+                if (this->joint_traj_pos_.size() == 1) {
+                    goal_completed = true;
+                    break;
+                }
+                feedback -> current_tf = this->endeffector_tf_buffer_->lookupTransform("world", "endeffector");
+                goal_handle->publish_feedback(feedback);
+                loop_rate.sleep();
+            }
+
+            result->final_end_effector_tf = this->endeffector_tf_buffer_->lookupTransform("world", "endeffector");
             goal_handle->succeed(result);
             RCLCPP_INFO(this->get_logger(), "Goal succeeded");
 

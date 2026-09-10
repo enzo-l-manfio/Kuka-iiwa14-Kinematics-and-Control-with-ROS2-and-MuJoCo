@@ -18,6 +18,9 @@ find_package(pinocchio REQUIRED)
 find_package(interfaces REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(geometry_msgs REQUIRED)
+
 
 add_executable(control_conductor src/control_conductor.cpp)
 ament_target_dependencies(control_conductor 
@@ -27,7 +30,9 @@ ament_target_dependencies(control_conductor
                           "eigen3_cmake_module"
                           "interfaces"
                           "sensor_msgs"
-                          "std_msgs")
+                          "std_msgs"
+                          "tf2_ros"
+                          "geometry_msgs")
 
 target_link_libraries(control_conductor pinocchio::pinocchio)
 

@@ -51,7 +51,9 @@ def generate_launch_description():
         executable="control_conductor",
         output="screen",
         parameters=[
-                    {"mjcf_model_path": xmlModelPath}
+                    {"mjcf_model_path": xmlModelPath},
+                    {"Kp": [10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]},
+                    {"Kd": [6.324556, 6.324556, 6.324556, 6.324556, 6.324556, 6.324556, 6.324556]}
                    ]
     )
 
