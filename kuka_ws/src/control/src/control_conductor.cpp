@@ -4,7 +4,6 @@
 #include <chrono>
 #include <vector>
 #include <deque>
-#include <string>
 
 #include "Eigen/Dense"
 
@@ -134,7 +133,7 @@ class ControlConductor : public rclcpp::Node
             }
             
             this->update_desired_state_timer_ = this->create_wall_timer(10ms, std::bind(&ControlConductor::update_desired_state, this));
-            this->update_current_endeffector_tf_timer_ ;
+
         }
 
     private:
@@ -152,8 +151,6 @@ class ControlConductor : public rclcpp::Node
     
         std::unique_ptr<tf2_ros::Buffer> endeffector_tf_buffer_;
         std::shared_ptr<tf2_ros::TransformListener> endeffector_tf_listener_{nullptr};
-        
-        geometry_msgs::msg::Transform current_endeffector_tf_;
 
         pinocchio::Model model_;
         pinocchio::Data data_;  
@@ -185,10 +182,8 @@ class ControlConductor : public rclcpp::Node
 
             pinocchio::rnea(this->model_, this->data_, qpos, qvel, acc_signal);
 
-            Eigen::VectorXd torques = data_.tau;
-
             auto torque_message = std_msgs::msg::Float64MultiArray();
-            torque_message.data = std::vector<double>(torques.data(), torques.data() + torques.size());
+            torque_message.data = std::vector<double>(data_.tau.data(), data_.tau.data() + data_.tau.size());
 
             this->torque_publisher_->publish(torque_message);
         }
@@ -201,7 +196,7 @@ class ControlConductor : public rclcpp::Node
 
             RCLCPP_INFO(this->get_logger(), "Executing goal");
 
-            auto current_tf = this->endeffector_tf_buffer_->lookupTransform("world", "endeffector");
+            auto current_tf = this->endeffector_tf_buffer_->lookupTransform("world", "endeffector", tf2::TimePoint(), tf2::durationFromSec(0.1)).transform;
 
             this->traj_request -> initial_tf = current_tf;
             this->traj_request -> final_tf =  goal->desired_tf;
@@ -214,8 +209,8 @@ class ControlConductor : public rclcpp::Node
             if (gen_traj_status != std::future_status::ready){
 
                 RCLCPP_INFO(this->get_logger(), "Failed to receive trajectory");
-                result -> final_tf = current_tf
-                goal_handle->abort();
+                result -> final_tf = current_tf;
+                goal_handle->abort(result);
                 return;
             }
 
@@ -231,7 +226,7 @@ class ControlConductor : public rclcpp::Node
             while(rclcpp::ok() && !goal_completed) {
 
                 if (goal_handle->is_canceling()) {
-                    result -> final_tf = current_tf
+                    result -> final_tf = current_tf;
                     goal_handle->canceled(result);
                     RCLCPP_INFO(this->get_logger(), "Goal canceled successfully");
                     return;
@@ -240,13 +235,14 @@ class ControlConductor : public rclcpp::Node
                     goal_completed = true;
                     break;
                 }
-                feedback -> current_tf = this->endeffector_tf_buffer_->lookupTransform("world", "endeffector");
+                feedback -> current_tf = this->endeffector_tf_buffer_->lookupTransform("world", "endeffector", tf2::TimePoint(), tf2::durationFromSec(0.1)).transform;
                 goal_handle->publish_feedback(feedback);
                 loop_rate.sleep();
             }
 
-            result->final_end_effector_tf = this->endeffector_tf_buffer_->lookupTransform("world", "endeffector");
+            result->final_tf = this->endeffector_tf_buffer_->lookupTransform("world", "endeffector", tf2::TimePoint(), tf2::durationFromSec(0.1)).transform;
             goal_handle->succeed(result);
+
             RCLCPP_INFO(this->get_logger(), "Goal succeeded");
 
         }

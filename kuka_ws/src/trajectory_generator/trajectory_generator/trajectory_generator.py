@@ -48,17 +48,13 @@ class TrajectoryGenerator(Node):
 
         self.endeffector_tf_broadcaster = TransformBroadcaster(self)
 
-    def tf_to_E3(tf):
+    def tf_to_E3(self, tf):
 
-        pos_vector = [tf.translation.x,
-                      tf.translation.y,
-                      tf.translation.z]
-        quaternion_elements = [tf.orientation.w,
-                               tf.orientation.x,
-                               tf.orientation.y,
-                               tf.orientation.z]
-        orientation_quaternion = UnitQuaternion(quaternion_elements)
-        return SE3.Trans(pos_vector)*SE3(orientation_quaternion)
+        v = [tf.rotation.x,
+             tf.rotation.y,
+             tf.rotation.z]
+        orientation_quaternion = UnitQuaternion(tf.rotation.w, v)
+        return SE3.Trans(x=tf.translation.x, y=tf.translation.y, z=tf.translation.z) * orientation_quaternion.SE3()
         
 
     def generate_trajectory(self, request, response):
