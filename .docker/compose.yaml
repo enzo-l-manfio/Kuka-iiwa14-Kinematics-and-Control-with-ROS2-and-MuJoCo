@@ -2,7 +2,7 @@ services:
   ros2_dev:
     build:
       context: ..
-      dockerfile: docker/Dockerfile
+      dockerfile: .docker/Dockerfile
     container_name: kuka_ros2_container
     network_mode: "host" 
     ipc: host
@@ -10,7 +10,7 @@ services:
       - DISPLAY=${DISPLAY}
       - QT_X11_NO_MITSHM=1
     volumes:
-      - ../src:/home/rosuser/kuka_ws/src
+      - ..:/home/rosuser/kuka_ws/src
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
     stdin_open: true
     tty: true
